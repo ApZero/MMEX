@@ -16,7 +16,7 @@
 <script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
 <style>
 :root{--bg:#0f0f13;--cd:#17171d;--bd:#26262e;--tx:#e8e8ee;--mu:#8a8a96;--or:#f97316;--gr:#4ade80;--rd:#f87171}
-@media(prefers-color-scheme:light){:root{--bg:#f6f5f2;--cd:#fff;--bd:#e4e2dc;--tx:#1c1c22;--mu:#6b6b76;--gr:#16a34a;--rd:#dc2626}}
+:root[data-th=light]{--bg:#f6f5f2;--cd:#fff;--bd:#e4e2dc;--tx:#1c1c22;--mu:#6b6b76;--gr:#16a34a;--rd:#dc2626}@media(prefers-color-scheme:light){:root:not([data-th=dark]){--bg:#f6f5f2;--cd:#fff;--bd:#e4e2dc;--tx:#1c1c22;--mu:#6b6b76;--gr:#16a34a;--rd:#dc2626}}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{overflow-x:hidden;max-width:100vw}
 body{background:var(--bg);color:var(--tx);font:13px 'DM Mono',monospace;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
@@ -50,6 +50,8 @@ input[type=search]{width:100%;padding:9px 12px;border-radius:10px;border:1px sol
 const CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/',$=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let D=null,S={tab:'panel',year:'',acc:'',plan:false,f:{},type:'all',per:'m',lvl:0,q:'',lim:150,err:''};
 const today=new Date().toLocaleDateString('sv');
+let TH='auto';try{TH=localStorage.getItem('th')||'auto'}catch(e){}
+const applyTh=()=>{document.documentElement.dataset.th=TH;$('meta[name=theme-color]').content=TH==='light'||(TH==='auto'&&matchMedia('(prefers-color-scheme:light)').matches)?'#f6f5f2':'#0f0f13'};applyTh();
 const idb=(m,v)=>new Promise(r=>{const o=indexedDB.open('mmexv',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>r();o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readwrite':'readwrite').objectStore('k'),q=m==='get'?s.get('f'):s.put(v,'f');q.onsuccess=()=>r(q.result);q.onerror=()=>r()}});
 
 async function load(buf,fn,fd){
@@ -79,7 +81,7 @@ const fm=(n,c)=>{c=c||D.cur[D.bid];return(n<0?'−':'')+Math.abs(n).toLocaleStri
  accOk=x=>!S.acc||x.a==S.acc||x.ta==S.acc,
  bar=p=>`<div class=bar><i style="width:${Math.max(0,p)}%"></i></div>`,
  stat=(l,v,c)=>`<div class=cd><small class=mu>${l}</small><div class="sv ${c||''}">${v}</div></div>`;
-function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&(!S.year||x.d.startsWith(S.year))&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||x.c.startsWith(S.f.c+':'))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
+function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&(!S.year||x.d.startsWith(S.year))&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||(S.lvl&&x.c.startsWith(S.f.c+':')))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
 const ex=()=>rows().filter(x=>x.tp!=='Transfer');
 function grp(a,k){const m={};a.forEach(x=>{const g=k(x),o=m[g]=m[g]||{k:g,e:0,i:0,n:0};x.tp==='Deposit'?o.i+=x.v:o.e-=x.v;o.n++});return Object.values(m)}
 function mo(a){const ms=[...new Set(a.map(x=>x.d.slice(0,7)))].sort();if(!ms.length)return 1;const[y1,m1]=ms[0].split('-'),[y2,m2]=ms.at(-1).split('-');return(y2-y1)*12+(m2-m1)+1}
@@ -97,12 +99,12 @@ function panel(){
  ${P.length?`<div class=cd style="margin-top:10px;cursor:pointer" data-a=typ data-v=plan><small class=mu>PLANIFICADO PENDIENTE · ${P.length} movs${pl?' · hasta '+pl:''}</small><div class=sv>${fm(pv)}</div>${S.plan?'':`<small class=mu>Patrimonio proyectado: ${fm(net+pv)}</small>`}</div>`:''}
  <h1 style="font-size:14px;margin:14px 0 8px">Cuentas</h1>${accs}
  <h1 style="font-size:14px;margin:14px 0 8px">${S.year||'Últimos 12 meses'}</h1><div class=cd><div class=mc>${ch.map(x=>`<div data-a=drill data-t=m data-v=${x.k}><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i><i style="height:${x.e/mx*100}%;background:var(--rd)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div><small class=mu><span class=gr>■</span> ingresos <span class=rd>■</span> gastos</small></div>
- <div class=g2><div class=cd><small class=mu>TOP CATEGORÍAS</small>${top5(tp(x=>x.c.split(':')[0],5),'c')}</div><div class=cd><small class=mu>TOP BENEFICIARIOS</small>${top5(tp(x=>x.p||'—',5),'p')}</div></div>
+ <div class=g2><div class=cd><small class=mu>TOP CATEGORÍAS</small>${top5(tp(catKey,5),'c')}</div><div class=cd><small class=mu>TOP BENEFICIARIOS</small>${top5(tp(x=>x.p||'—',5),'p')}</div></div>
  <div class=cd><small class=mu>MAYORES GASTOS</small>${big.map(mv).join('')}</div>`}
 
 function rank(t){
- const a=ex(),M=mo(a),k=t==='c'?(S.lvl?x=>x.c.split(':')[0]:x=>x.c):x=>x.p||'—',g=grp(a,k).filter(x=>x.e||x.i).sort((p,q)=>q.e-p.e),mx=Math.max(1,...g.map(x=>x.e)),tot=g.reduce((s,x)=>s+(x.e>0?x.e:0),0)||1;
- return`<div class=sw>${t==='c'?`<button class="ch${S.lvl?'':' on'}" data-a=lvl data-v=0>Completa</button><button class="ch${S.lvl?' on':''}" data-a=lvl data-v=1>Principal</button>`:''}<small class=mu>Gastos ${fm(tot)} · ${g.length} ítems</small></div>`+g.map(x=>`<div class=row data-a=drill data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fm(x.e)}</b></div>${bar(x.e/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x.e/M)} · ${Math.round(x.e/tot*100)}%${x.i?' · ingresos '+fm(x.i):''}</small></div>`).join('')}
+ const a=ex(),M=mo(a),k=t==='c'?catKey:x=>x.p||'—',g=grp(a,k).filter(x=>x.e||x.i).sort((p,q)=>q.e-p.e),mx=Math.max(1,...g.map(x=>x.e)),tot=g.reduce((s,x)=>s+(x.e>0?x.e:0),0)||1;
+ return`<div class=sw><small class=mu>Gastos ${fm(tot)} · ${g.length} ítems</small></div>`+g.map(x=>`<div class=row data-a=drill data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fm(x.e)}</b></div>${bar(x.e/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x.e/M)} · ${Math.round(x.e/tot*100)}%${x.i?' · ingresos '+fm(x.i):''}</small></div>`).join('')}
 
 function pers(){
  const a=ex(),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=mo(a),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
@@ -123,21 +125,21 @@ function movs(){
  const ty=[['all','Todo'],['e','Gastos'],['i','Ingresos'],['t','Transf.'],['plan','Planificadas']],fl=Object.entries(S.f);
  return`<div class=sw>${ty.map(([k,l])=>`<button class="ch${S.type===k?' on':''}" data-a=typ data-v=${k}>${l}</button>`).join('')}</div>${fl.length?`<div class=sw>${fl.map(([k,v])=>`<button class="ch on" data-a=clr>${E(v)} ✕</button>`).join('')}</div>`:''}<input type=search id=sq placeholder="Buscar beneficiario, categoría, nota…" value="${E(S.q)}"/><div id=ml>${list()}</div>`}
 
-const cats=()=>rank('c'),pay=()=>rank('p');
+const catKey=x=>S.lvl?x.c.split(':')[0]:x.c,cats=()=>rank('c'),pay=()=>rank('p');
 function render(){
  const app=$('#app');
  if(!D){app.innerHTML=`<div class=w><h1>MMEX <span class=or>Viewer</span></h1><div class=cd style="margin-top:20px;text-align:center;padding:40px 20px"><p>Abrí tu archivo <b>.mmex</b> de MoneyManager EX</p><p class=mu style="margin:8px 0 16px">Se lee solo en tu dispositivo, no se sube a ningún lado.</p><button class=pb data-a=open>Elegir archivo</button>${S.err?`<p class=rd style="margin-top:14px">${E(S.err)}</p>`:''}</div></div>`;return}
  const yrs=[...new Set(D.T.map(x=>x.d.slice(0,4)))].sort().reverse(),np=D.T.filter(x=>x.plan&&x.tp!=='Transfer').length,
  tabs=[['panel','Panel'],['cats','Categ.'],['pay','Benef.'],['pers','Períodos'],['movs','Movs.']];
- app.innerHTML=`<div class=w><div class=hd><div><h1>MMEX <span class=or>Viewer</span></h1><small class=mu>${E(D.fn)} · mod. ${D.fd}</small></div><button class=gb data-a=open>Cambiar</button></div>
+ app.innerHTML=`<div class=w><div class=hd><div><h1>MMEX <span class=or>Viewer</span></h1><small class=mu>${E(D.fn)} · mod. ${D.fd}</small></div><div><button class=gb data-a=th>${{auto:'Auto',light:'☀ Claro',dark:'☾ Oscuro'}[TH]}</button> <button class=gb data-a=open>Cambiar</button></div></div>
  <div class=tb>${tabs.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-a=nav data-v=${k}>${l}</button>`).join('')}</div>
  <div class=ft><select id=acs><option value="">Todas las cuentas</option>${Object.values(D.A).sort((p,q)=>p.name.localeCompare(q.name)).map(x=>`<option value=${x.id}${S.acc==x.id?' selected':''}>${E(x.name)}${x.open?'':' (cerrada)'}</option>`).join('')}</select><button class="ch${S.plan?' on':''}" data-a=pl>Planif.: ${S.plan?'incluidas':'excluidas'}${np?' ('+np+')':''}</button></div>
- ${yrs.length>1?`<div class=yr><button class="ch${S.year?'':' on'}" data-a=yr data-v="">Todos</button>${yrs.map(y=>`<button class="ch${S.year===y?' on':''}" data-a=yr data-v=${y}>${y}</button>`).join('')}</div>`:''}
+ ${S.tab==='panel'||S.tab==='cats'?`<div class=sw><small class=mu>Subcategorías:</small><button class="ch${S.lvl?'':' on'}" data-a=lvl data-v=0>Separadas</button><button class="ch${S.lvl?' on':''}" data-a=lvl data-v=1>Sumadas</button></div>`:''}${yrs.length>1?`<div class=yr><button class="ch${S.year?'':' on'}" data-a=yr data-v="">Todos</button>${yrs.map(y=>`<button class="ch${S.year===y?' on':''}" data-a=yr data-v=${y}>${y}</button>`).join('')}</div>`:''}
  <div class=fade>${({panel,cats,pay,pers,movs})[S.tab]()}</div></div>`}
 
 document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el)return;const{a,t,v}=el.dataset,go=()=>{S.tab='movs';S.type='all';S.lim=150;S.q=''};
  if(a==='open')return $('#fi').click();
- ({nav:()=>{S.tab=v;S.f={};S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};go()},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,yr:()=>S.year=v,lvl:()=>S.lvl=+v,per:()=>S.per=v,clr:()=>S.f={},more:()=>S.lim+=200})[a]?.();
+ ({nav:()=>{S.tab=v;S.f={};S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};go()},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>S.year=v,lvl:()=>S.lvl=+v,per:()=>S.per=v,clr:()=>S.f={},more:()=>S.lim+=200})[a]?.();
  if(a==='yr'&&S.tab==='pers'&&el.dataset.t==='m')S.tab='pers';render();if(a==='nav'||a==='drill')scrollTo(0,0)});
 document.addEventListener('change',e=>{if(e.target.id==='acs'){S.acc=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id==='sq'){S.q=e.target.value;S.lim=150;$('#ml').innerHTML=list()}});
