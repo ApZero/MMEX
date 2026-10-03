@@ -48,7 +48,7 @@ input[type=search]{width:100%;padding:9px 12px;border-radius:10px;border:1px sol
 <body><div id="app"></div><input type="file" id="fi" hidden/>
 <script>
 const CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/',$=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let D=null,S={tab:'panel',year:'',acc:'',plan:false,f:{},type:'all',per:'m',lvl:0,q:'',lim:150,err:''};
+let D=null,S={tab:'panel',year:'',acc:'',plan:false,f:{},type:'all',per:'m',lvl:0,q:'',lim:150,err:'',cp:{e:'',i:''},fx:0};
 try{S.lvl=+localStorage.getItem('lv')||0}catch(e){}
 const today=new Date().toLocaleDateString('sv');
 let TH='auto';try{TH=localStorage.getItem('th')||'auto'}catch(e){}
@@ -82,7 +82,7 @@ const fm=(n,c)=>{c=c||D.cur[D.bid];return(n<0?'−':'')+Math.abs(n).toLocaleStri
  accOk=x=>!S.acc||x.a==S.acc||x.ta==S.acc,
  bar=p=>`<div class=bar><i style="width:${Math.max(0,p)}%"></i></div>`,
  stat=(l,v,c)=>`<div class=cd><small class=mu>${l}</small><div class="sv ${c||''}">${v}</div></div>`;
-function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&(!S.year||x.d.startsWith(S.year))&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||(S.lvl&&x.c.startsWith(S.f.c+':')))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
+function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&(!S.year||x.d.startsWith(S.year))&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||(S.lvl&&!S.fx&&x.c.startsWith(S.f.c+':')))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
 const ex=()=>rows().filter(x=>x.tp!=='Transfer');
 function grp(a,k){const m={};a.forEach(x=>{const g=k(x),o=m[g]=m[g]||{k:g,e:0,i:0,n:0};x.tp==='Deposit'?o.i+=x.v:o.e-=x.v;o.n++});return Object.values(m)}
 function mo(a){const ms=[...new Set(a.map(x=>x.d.slice(0,7)))].sort();if(!ms.length)return 1;const[y1,m1]=ms[0].split('-'),[y2,m2]=ms.at(-1).split('-');return(y2-y1)*12+(m2-m1)+1}
@@ -94,7 +94,7 @@ function panel(){
  const G={};Object.values(D.A).filter(x=>x.open||b[x.id]).forEach(x=>(G[x.cur]=G[x.cur]||[]).push(x));let net=0;
  const accs=Object.entries(G).map(([c,l])=>{const cu=D.cur[c],s=l.reduce((t,x)=>t+b[x.id],0);net+=s*cu.r;return`<div class=cd><div class=rt><b>${E(cu.s)}</b><b>${fm(s,cu)}</b></div>${l.sort((p,q)=>b[q.id]-b[p.id]).map(x=>`<div class=ar data-a=acc data-v=${x.id}><span>${E(x.name)}</span><span class="${b[x.id]<0?'rd':''}">${fm(b[x.id],cu)}</span></div>`).join('')}</div>`}).join('');
  const P=D.T.filter(x=>x.plan&&x.tp!=='Transfer'&&accOk(x)),pv=P.reduce((s,x)=>s+x.v,0),pl=P.map(x=>x.d).sort().at(-1);
- const tp=(k,n)=>grp(a,k).sort((p,q)=>q.e-p.e).slice(0,n).filter(x=>x.e>0),top5=(l,t)=>l.map(x=>`<div class=row data-a=drill data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fn(x.e)}</b></div>${bar(x.e/l[0].e*100)}</div>`).join('');
+ const tp=(k,n)=>grp(a,k).sort((p,q)=>q.e-p.e).slice(0,n).filter(x=>x.e>0),top5=(l,t)=>l.map(x=>`<div class=row data-a=${t==='c'&&S.lvl?'cpg':'drill'} data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fn(x.e)}</b></div>${bar(x.e/l[0].e*100)}</div>`).join('');
  const big=a.filter(x=>x.tp==='Withdrawal').sort((p,q)=>p.v-q.v).slice(0,5);
  return`<div class=g>${stat('Patrimonio ('+E(D.cur[D.bid].s)+')',fm(net),net<0?'rd':'')}${stat('Balance período',fm(I-X),I-X<0?'rd':'gr')}${stat('Ingresos',fm(I),'gr')}${stat('Gastos',fm(X),'rd')}${stat('Prom. gasto/mes',fm(X/M))}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Tasa de ahorro',I?Math.round((I-X)/I*100)+'%':'—')}${stat('Mes más alto',top?top.k+'<br><small>'+fm(top.e)+'</small>':'—')}</div>
  ${P.length?`<div class=cd style="margin-top:10px;cursor:pointer" data-a=typ data-v=plan><small class=mu>PLANIFICADO PENDIENTE · ${P.length} movs${pl?' · hasta '+pl:''}</small><div class=sv>${fm(pv)}</div>${S.plan?'':`<small class=mu>Patrimonio proyectado: ${fm(net+pv)}</small>`}</div>`:''}
@@ -103,8 +103,14 @@ function panel(){
  <div class=g2><div class=cd><small class=mu>TOP CATEGORÍAS</small>${top5(tp(catKey,5),'c')}</div><div class=cd><small class=mu>TOP BENEFICIARIOS</small>${top5(tp(x=>x.p||'—',5),'p')}</div></div>
  <div class=cd><small class=mu>MAYORES GASTOS</small>${big.map(mv).join('')}</div>`}
 
-function rl(t,m){const a=ex(),M=mo(a),k=t==='c'?catKey:x=>x.p||'—',g=grp(a,k).filter(x=>x[m]>0).sort((p,q)=>q[m]-p[m]),mx=g[0]?.[m]||1,tot=g.reduce((s,x)=>s+x[m],0)||1;
- return`<div class=sw><small class=mu>${m==='e'?'Gastos':'Ingresos'} ${fm(tot)} · ${g.length} ítems</small></div>`+g.map(x=>`<div class=row data-a=drill data-t=${t} data-y=${m==='i'?'i':'a'} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fm(x[m])}</b></div>${bar(x[m]/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x[m]/M)} · ${Math.round(x[m]/tot*100)}%</small></div>`).join('')}
+function rl(t,m){
+ const hi=t==='c'&&S.lvl,cp=hi?S.cp[m]:'';let a=ex();if(cp)a=a.filter(x=>x.c===cp||x.c.startsWith(cp+':'));
+ const pre=new Set();if(hi)a.forEach(x=>{const sg=x.c.split(':');for(let i=1;i<sg.length;i++)pre.add(sg.slice(0,i).join(':'))});
+ const d=cp?cp.split(':').length:0,k=hi?(x=>x.c===cp?cp+'\u0001':x.c.split(':').slice(0,d+1).join(':')):t==='c'?catKey:x=>x.p||'—';
+ const M=mo(a),g=grp(a,k).filter(x=>x[m]>0).sort((p,q)=>q[m]-p[m]),mx=g[0]?.[m]||1,tot=g.reduce((s,x)=>s+x[m],0)||1,y=m==='i'?'i':'a',sg=cp?cp.split(':'):[];
+ const bc=cp?`<div class=sw><button class=ch data-a=cp data-m=${m} data-v="">Todas</button>${sg.map((n,i)=>`<button class=ch data-a=cp data-m=${m} data-v="${E(sg.slice(0,i+1).join(':'))}">› ${E(n)}</button>`).join('')}<button class="ch on" data-a=drill data-t=c data-y=${y} data-v="${E(cp)}">Ver movs.</button></div>`:'';
+ return bc+`<div class=sw><small class=mu>${m==='e'?'Gastos':'Ingresos'} ${fm(tot)} · ${g.length} ítems</small></div>`+g.map(x=>{const dr=x.k.endsWith('\u0001'),nv=hi&&!dr&&pre.has(x.k),at=nv?`data-a=cp data-m=${m}`:`data-a=drill data-t=${t} data-y=${y}${dr?' data-x=1':''}`;
+  return`<div class=row ${at} data-v="${E(dr?cp:x.k)}"><div class=rt><span>${E(dr?'Directo en '+cp.split(':').pop():hi?x.k.split(':').pop():x.k)}${nv?' ›':''}</span><b>${fm(x[m])}</b></div>${bar(x[m]/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x[m]/M)} · ${Math.round(x[m]/tot*100)}%</small></div>`}).join('')}
 const rank=t=>rl(t,'e');
 function pers(){
  const a=ex(),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=mo(a),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
@@ -179,7 +185,7 @@ function render(){
 
 document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el)return;const{a,t,v}=el.dataset,go=()=>{S.tab='movs';S.type='all';S.lim=150;S.q=''};
  if(a==='open')return $('#fi').click();
- ({nav:()=>{S.tab=v;S.f={};S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};go();if(el.dataset.y==='i')S.type='i'},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>S.year=v,lvl:()=>{S.lvl=+v;try{localStorage.setItem('lv',v)}catch(e){}},sum:()=>openSum(v),shr:SH,dl:DL,cl:closeSum,vm:()=>{closeSum();S.type='all';S.q='';S.lim=150;S.tab='movs';S.f={};if(v.length===7){S.f={m:v};S.year=''}else S.year=v},per:()=>S.per=v,clr:()=>S.f={},more:()=>S.lim+=200})[a]?.();
+ ({nav:()=>{if(v===S.tab)S.cp={e:'',i:''};S.tab=v;S.f={};S.fx=0;S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};S.fx=el.dataset.x?1:0;go();if(el.dataset.y==='i')S.type='i'},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>S.year=v,lvl:()=>{S.cp={e:'',i:''};S.lvl=+v;try{localStorage.setItem('lv',v)}catch(e){}},sum:()=>openSum(v),shr:SH,dl:DL,cl:closeSum,vm:()=>{closeSum();S.type='all';S.q='';S.lim=150;S.tab='movs';S.f={};if(v.length===7){S.f={m:v};S.year=''}else S.year=v},per:()=>S.per=v,clr:()=>{S.f={};S.fx=0},cp:()=>{S.cp[el.dataset.m||'e']=v},cpg:()=>{S.fx=0;if(D.T.some(x=>x.c.startsWith(v+':'))){S.cp.e=v;S.tab='cats';S.f={}}else{S.f={c:v};go()}},more:()=>S.lim+=200})[a]?.();
  if(a==='yr'&&S.tab==='pers'&&el.dataset.t==='m')S.tab='pers';render();if(a==='nav'||a==='drill')scrollTo(0,0)});
 document.addEventListener('change',e=>{if(e.target.id==='acs'){S.acc=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id==='sq'){S.q=e.target.value;S.lim=150;$('#ml').innerHTML=list()}});
