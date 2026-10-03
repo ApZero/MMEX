@@ -127,7 +127,7 @@ function movs(){
 
 const catKey=x=>S.lvl?x.c.split(':')[0]:x.c,cats=()=>rank('c'),pay=()=>rank('p');
 
-function inc(){
+function ingr(){
  const a=ex(),d=a.filter(x=>x.tp==='Deposit'),M=mo(a),I=d.reduce((s,x)=>s+x.v,0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0),g=grp(d,x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>x.i)),best=g.slice().sort((p,q)=>q.i-p.i)[0],big=d.slice().sort((p,q)=>q.v-p.v)[0];
  return`<div class=g>${stat('Total ingresos',fm(I),'gr')}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Mejor mes',best?best.k+'<br><small>'+fm(best.i)+'</small>':'—')}${stat('Cubren los gastos',X?Math.round(I/X*100)+'%':'—')}${stat('Nº de ingresos',d.length)}${stat('Prom. por ingreso',d.length?fm(I/d.length):'—')}${stat('Meses con ingresos',g.length+' / '+M)}${stat('Mayor ingreso',big?fm(big.v)+'<br><small>'+E(big.p||big.c)+' · '+big.d+'</small>':'—')}</div>
  <div class=cd style="margin-top:10px"><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k}><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div></div>
