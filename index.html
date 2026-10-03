@@ -73,7 +73,7 @@ async function load(buf,fn,fd){
   const b={id:x.TRANSID,d,a:x.ACCOUNTID,ta:x.TOACCOUNTID,tp,s:x.STATUS,n:x.NOTES||'',p:x.PAYEEID>0?pm[x.PAYEEID]||'':'',amt:x.TRANSACTIONAMOUNT??x.TRANSAMOUNT,tamt:x.TOTRANSAMOUNT,plan:d>today};
   R.push(b);const ss=sp[x.TRANSID],mk=(amt,c,n)=>T.push({...b,amt,c,n,v:tp==='Transfer'?0:(tp==='Deposit'?1:-1)*amt*rate});
   if(ss&&tp!=='Transfer')ss.forEach(s=>mk(s.SPLITTRANSAMOUNT,path(s.CATEGID),s.NOTES||b.n));else mk(b.amt,tp==='Transfer'?'':path(x.CATEGID),b.n)});
- D={cur,bid,A,R,T,fn,fd};S.err='';if(!T.some(x=>x.d.startsWith(S.year))){S.year=T.map(x=>x.d.slice(0,4)).sort().at(-1)||'';S.month=''}
+ D={cur,bid,A,R,T,fn,fd};D.t0=T.reduce((m,x)=>!x.plan&&x.d<m?x.d:m,today).slice(0,7);S.err='';if(!T.some(x=>x.d.startsWith(S.year))){S.year=T.map(x=>x.d.slice(0,4)).sort().at(-1)||'';S.month=''}
  }catch(e){D=null;S.err='No se pudo leer el archivo (¿está cifrado o no es .mmex?). '+e.message}
  render()}
 
@@ -89,15 +89,21 @@ function grp(a,k){const m={};a.forEach(x=>{const g=k(x),o=m[g]=m[g]||{k:g,e:0,i:
 function mo(a){const ms=[...new Set(a.map(x=>x.d.slice(0,7)))].sort();if(!ms.length)return 1;const[y1,m1]=ms[0].split('-'),[y2,m2]=ms.at(-1).split('-');return(y2-y1)*12+(m2-m1)+1}
 function bal(){const b={};for(const k in D.A)b[k]=D.A[k].init;D.R.forEach(x=>{if(x.plan&&!S.plan)return;if(x.tp==='Transfer'){if(x.a in b)b[x.a]-=x.amt;if(x.ta in b)b[x.ta]+=x.tamt}else if(x.a in b)b[x.a]+=(x.tp==='Deposit'?1:-1)*x.amt});return b}
 
+const dimOf=(y,m)=>new Date(y,m,0).getDate(),fN=n=>Number.isInteger(n)?String(n):n.toFixed(1).replace('.',',');
+function monthsIn(y){const Y=+y,cy=+today.slice(0,4),cm=+today.slice(5,7),cd=+today.slice(8),t0=D.t0,st=Y===+t0.slice(0,4)?+t0.slice(5):1,en=!S.plan&&Y===cy?cm-1+cd/dimOf(cy,cm):12;return Math.max(.1,en-(st-1))}
+function allMonths(){const cy=+today.slice(0,4),y1=S.plan?D.T.reduce((m,x)=>Math.max(m,+x.d.slice(0,4)),cy):cy;let n=0;for(let y=+D.t0.slice(0,4);y<=y1;y++)n+=monthsIn(y);return n}
+function span(){const L=(n,u)=>fN(n)+' '+(u==='día'?(n===1?'día':'días'):(n===1?'mes':'meses'));
+ if(S.year&&S.month){const n=S.year+'-'+S.month===today.slice(0,7)&&!S.plan?+today.slice(8):dimOf(+S.year,+S.month);return{u:'día',n,l:L(n,'día')}}
+ const n=S.year?monthsIn(S.year):allMonths();return{u:'mes',n,l:L(n,'mes')}}
 function panel(){
- const a=ex(),M=mo(a),b=bal(),I=a.reduce((s,x)=>s+(x.tp==='Deposit'?x.v:0),0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0);
+ const a=ex(),sp=span(),b=bal(),I=a.reduce((s,x)=>s+(x.tp==='Deposit'?x.v:0),0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0);
  const g=grp(ex({nm:1}),x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>Math.max(x.i,x.e))),top=g.slice().sort((p,q)=>q.e-p.e)[0];
  const G={};Object.values(D.A).filter(x=>x.open||b[x.id]).forEach(x=>(G[x.cur]=G[x.cur]||[]).push(x));let net=0;
  const accs=Object.entries(G).map(([c,l])=>{const cu=D.cur[c],s=l.reduce((t,x)=>t+b[x.id],0);net+=s*cu.r;return`<div class=cd><div class=rt><b>${E(cu.s)}</b><b>${fm(s,cu)}</b></div>${l.sort((p,q)=>b[q.id]-b[p.id]).map(x=>`<div class=ar data-a=acc data-v=${x.id}><span>${E(x.name)}</span><span class="${b[x.id]<0?'rd':''}">${fm(b[x.id],cu)}</span></div>`).join('')}</div>`}).join('');
  const P=D.T.filter(x=>x.plan&&x.tp!=='Transfer'&&accOk(x)),pv=P.reduce((s,x)=>s+x.v,0),pl=P.map(x=>x.d).sort().at(-1);
  const tp=(k,n)=>grp(a,k).sort((p,q)=>q.e-p.e).slice(0,n).filter(x=>x.e>0),top5=(l,t)=>l.map(x=>`<div class=row data-a=${t==='c'&&S.lvl?'cpg':'drill'} data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fn(x.e)}</b></div>${bar(x.e/l[0].e*100)}</div>`).join('');
  const big=a.filter(x=>x.tp==='Withdrawal').sort((p,q)=>p.v-q.v).slice(0,5);
- return`<div class=g>${stat('Patrimonio ('+E(D.cur[D.bid].s)+')',fm(net),net<0?'rd':'')}${stat('Balance período',fm(I-X),I-X<0?'rd':'gr')}${stat('Ingresos',fm(I),'gr')}${stat('Gastos',fm(X),'rd')}${stat('Prom. gasto/mes',fm(X/M))}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Tasa de ahorro',I?Math.round((I-X)/I*100)+'%':'—')}${stat('Mes más alto',top?top.k+'<br><small>'+fm(top.e)+'</small>':'—')}</div>
+ return`<div class=g>${stat('Patrimonio ('+E(D.cur[D.bid].s)+')',fm(net),net<0?'rd':'')}${stat('Balance período',fm(I-X),I-X<0?'rd':'gr')}${stat('Ingresos',fm(I),'gr')}${stat('Gastos',fm(X),'rd')}${stat('Prom. gasto/'+sp.u,fm(X/sp.n)+'<br><small class=mu>÷ '+sp.l+'</small>')}${stat('Prom. ingreso/'+sp.u,fm(I/sp.n)+'<br><small class=mu>÷ '+sp.l+'</small>')}${stat('Tasa de ahorro',I?Math.round((I-X)/I*100)+'%':'—')}${stat('Mes más alto',top?top.k+'<br><small>'+fm(top.e)+'</small>':'—')}</div>
  ${P.length?`<div class=cd style="margin-top:10px;cursor:pointer" data-a=typ data-v=plan><small class=mu>PLANIFICADO PENDIENTE · ${P.length} movs${pl?' · hasta '+pl:''}</small><div class=sv>${fm(pv)}</div>${S.plan?'':`<small class=mu>Patrimonio proyectado: ${fm(net+pv)}</small>`}</div>`:''}
  <h1 style="font-size:14px;margin:14px 0 8px">Cuentas</h1>${accs}
  <h1 style="font-size:14px;margin:14px 0 8px">${S.year||'Últimos 12 meses'}</h1><div class=cd><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k} style="opacity:${S.month&&x.k.slice(5)!==S.month?.4:1}"><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i><i style="height:${x.e/mx*100}%;background:var(--rd)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div><small class=mu><span class=gr>■</span> ingresos <span class=rd>■</span> gastos</small></div>
@@ -108,17 +114,17 @@ function rl(t,m){
  const hi=t==='c'&&S.lvl,cp=hi?S.cp[m]:'';let a=ex();if(cp)a=a.filter(x=>x.c===cp||x.c.startsWith(cp+':'));
  const pre=new Set();if(hi)a.forEach(x=>{const sg=x.c.split(':');for(let i=1;i<sg.length;i++)pre.add(sg.slice(0,i).join(':'))});
  const d=cp?cp.split(':').length:0,k=hi?(x=>x.c===cp?cp+'\u0001':x.c.split(':').slice(0,d+1).join(':')):t==='c'?catKey:x=>x.p||'—';
- const M=mo(a),g=grp(a,k).filter(x=>x[m]>0).sort((p,q)=>q[m]-p[m]),mx=g[0]?.[m]||1,tot=g.reduce((s,x)=>s+x[m],0)||1,y=m==='i'?'i':'a',sg=cp?cp.split(':'):[];
+ const sp=span(),g=grp(a,k).filter(x=>x[m]>0).sort((p,q)=>q[m]-p[m]),mx=g[0]?.[m]||1,tot=g.reduce((s,x)=>s+x[m],0)||1,y=m==='i'?'i':'a',sg=cp?cp.split(':'):[];
  const bc=cp?`<div class=sw><button class=ch data-a=cp data-m=${m} data-v="">Todas</button>${sg.map((n,i)=>`<button class=ch data-a=cp data-m=${m} data-v="${E(sg.slice(0,i+1).join(':'))}">› ${E(n)}</button>`).join('')}<button class="ch on" data-a=drill data-t=c data-y=${y} data-v="${E(cp)}">Ver movs.</button></div>`:'';
- return bc+`<div class=sw><small class=mu>${m==='e'?'Gastos':'Ingresos'} ${fm(tot)} · ${g.length} ítems</small></div>`+g.map(x=>{const dr=x.k.endsWith('\u0001'),nv=hi&&!dr&&pre.has(x.k),at=nv?`data-a=cp data-m=${m}`:`data-a=drill data-t=${t} data-y=${y}${dr?' data-x=1':''}`;
-  return`<div class=row ${at} data-v="${E(dr?cp:x.k)}"><div class=rt><span>${E(dr?'Directo en '+cp.split(':').pop():hi?x.k.split(':').pop():x.k)}${nv?' ›':''}</span><b>${fm(x[m])}</b></div>${bar(x[m]/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x[m]/M)} · ${Math.round(x[m]/tot*100)}%</small></div>`}).join('')}
+ return bc+`<div class=sw><small class=mu>${m==='e'?'Gastos':'Ingresos'} ${fm(tot)} · ${g.length} ítems · ÷ ${sp.l}</small></div>`+g.map(x=>{const dr=x.k.endsWith('\u0001'),nv=hi&&!dr&&pre.has(x.k),at=nv?`data-a=cp data-m=${m}`:`data-a=drill data-t=${t} data-y=${y}${dr?' data-x=1':''}`;
+  return`<div class=row ${at} data-v="${E(dr?cp:x.k)}"><div class=rt><span>${E(dr?'Directo en '+cp.split(':').pop():hi?x.k.split(':').pop():x.k)}${nv?' ›':''}</span><b>${fm(x[m])}</b></div>${bar(x[m]/mx*100)}<small class=mu>${x.n} mov · prom/${sp.u} ${fm(x[m]/sp.n)} · ${Math.round(x[m]/tot*100)}%</small></div>`}).join('')}
 const rank=t=>rl(t,'e');
 function pers(){
- const a=ex({nm:1}),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=mo(a),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
+ const a=ex({nm:1}),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=S.year?monthsIn(S.year):allMonths(),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
  const r=(l,i,e,s,sub,at)=>`<div class=pr ${at||''}><span>${l}</span><span class=gr>${fn(i)}</span><span class=rd>${fn(e)}</span><b class="${s<0?'rd':''}">${fn(s)}</b>${sub?`<small class=mu>${sub}</small>`:''}</div>`;
  return`<div class=sw><button class="ch${m?' on':''}" data-a=per data-v=m>Mensual</button><button class="ch${m?'':' on'}" data-a=per data-v=y>Anual</button><small class=mu>en ${E(D.cur[D.bid].s)}</small></div><div class=pr style="border:0"><small class=mu>Período</small><small class=mu>Ingresos</small><small class=mu>Gastos</small><small class=mu>Neto</small></div>`+
- r('<b>Prom./mes</b>',I/M,X/M,(I-X)/M)+r('<b>Total</b>',I,X,I-X)+
- g.map(x=>{const n=m?1:mo(a.filter(y=>y.d.startsWith(x.k)));return r(x.k,x.i,x.e,x.i-x.e,m?'':`prom/mes: +${fn(x.i/n)} / −${fn(x.e/n)}`,`data-a=sum data-v=${x.k} style="cursor:pointer"`)}).join('')}
+ r('<b>Prom./mes</b>',I/M,X/M,(I-X)/M,'÷ '+fN(M)+' meses')+r('<b>Total</b>',I,X,I-X)+
+ g.map(x=>{const n=m?1:monthsIn(x.k);return r(x.k,x.i,x.e,x.i-x.e,m?'':`prom/mes (÷ ${fN(n)}): +${fn(x.i/n)} / −${fn(x.e/n)}`,`data-a=sum data-v=${x.k} style="cursor:pointer"`)}).join('')}
 
 function mv(x){const T=x.tp==='Transfer',c=ac(x.a),s=T?'':(x.tp==='Deposit'?1:-1);
  return`<div class="mv${x.plan?' pl':''}"><div><div>${E(T?(D.A[x.a]?.name+' → '+D.A[x.ta]?.name):x.p||'—')}${x.plan?'<span class=bd>plan</span>':''}</div><small>${x.d} · ${E(x.c||'Transferencia')}${T?'':' · '+E(D.A[x.a]?.name)}${x.n?' · '+E(x.n):''}</small></div><b class="${T?'':s>0?'gr':'rd'}">${fm((s||1)*x.amt,c)}</b></div>`}
@@ -135,8 +141,8 @@ function movs(){
 const catKey=x=>S.lvl?x.c.split(':')[0]:x.c,cats=()=>rank('c'),pay=()=>rank('p');
 
 function ingr(){
- const a=ex(),d=a.filter(x=>x.tp==='Deposit'),M=mo(a),I=d.reduce((s,x)=>s+x.v,0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0),gf=grp(d,x=>x.d.slice(0,7)),g=grp(ex({nm:1}).filter(x=>x.tp==='Deposit'),x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>x.i)),best=gf.slice().sort((p,q)=>q.i-p.i)[0],big=d.slice().sort((p,q)=>q.v-p.v)[0];
- return`<div class=g>${stat('Total ingresos',fm(I),'gr')}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Mejor mes',best?best.k+'<br><small>'+fm(best.i)+'</small>':'—')}${stat('Cubren los gastos',X?Math.round(I/X*100)+'%':'—')}${stat('Nº de ingresos',d.length)}${stat('Prom. por ingreso',d.length?fm(I/d.length):'—')}${stat('Meses con ingresos',gf.length+' / '+M)}${stat('Mayor ingreso',big?fm(big.v)+'<br><small>'+E(big.p||big.c)+' · '+big.d+'</small>':'—')}</div>
+ const a=ex(),d=a.filter(x=>x.tp==='Deposit'),sp=span(),cnt=new Set(d.map(x=>x.d.slice(0,sp.u==='mes'?7:10))).size,I=d.reduce((s,x)=>s+x.v,0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0),gf=grp(d,x=>x.d.slice(0,7)),g=grp(ex({nm:1}).filter(x=>x.tp==='Deposit'),x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>x.i)),best=gf.slice().sort((p,q)=>q.i-p.i)[0],big=d.slice().sort((p,q)=>q.v-p.v)[0];
+ return`<div class=g>${stat('Total ingresos',fm(I),'gr')}${stat('Prom. ingreso/'+sp.u,fm(I/sp.n)+'<br><small class=mu>÷ '+sp.l+'</small>')}${stat('Mejor mes',best?best.k+'<br><small>'+fm(best.i)+'</small>':'—')}${stat('Cubren los gastos',X?Math.round(I/X*100)+'%':'—')}${stat('Nº de ingresos',d.length)}${stat('Prom. por ingreso',d.length?fm(I/d.length):'—')}${stat((sp.u==='mes'?'Meses':'Días')+' con ingresos',cnt+' / '+Math.ceil(sp.n))}${stat('Mayor ingreso',big?fm(big.v)+'<br><small>'+E(big.p||big.c)+' · '+big.d+'</small>':'—')}</div>
  <div class=cd style="margin-top:10px"><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k} style="opacity:${S.month&&x.k.slice(5)!==S.month?.4:1}"><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div></div>
  <h1 style="font-size:14px;margin:14px 0 8px">Por categoría</h1><div class=cd>${rl('c','i')}</div><h1 style="font-size:14px;margin:14px 0 8px">Por fuente</h1><div class=cd>${rl('p','i')}</div>`}
 
@@ -148,7 +154,7 @@ DL=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(SUMBLOB);
 SH=()=>{const f=new File([SUMBLOB],'mmex-'+SUMK+'.png',{type:'image/png'});navigator.canShare?.({files:[f]})?navigator.share({files:[f]}).catch(()=>{}):DL()};
 async function openSum(k){
  SUMK=k;const m=k.length===7,Y=+k.slice(0,4),Mo=+k.slice(5),c=pd(k),pk=m?(d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))(new Date(Y,Mo-2,1)):String(Y-1),p=pd(pk),{I,X}=c;
- const dim=m?new Date(Y,Mo,0).getDate():12,ed=m&&k===today.slice(0,7)?+today.slice(8):dim,M=mo(c.a),css=getComputedStyle(document.documentElement),C=n=>css.getPropertyValue(n).trim();
+ const dim=m?new Date(Y,Mo,0).getDate():12,ed=m&&k===today.slice(0,7)?+today.slice(8):dim,M=monthsIn(String(Y)),css=getComputedStyle(document.documentElement),C=n=>css.getPropertyValue(n).trim();
  await Promise.all(['700 20px "DM Mono"','800 20px Syne','400 20px "DM Mono"'].map(f=>document.fonts.load(f)));
  const W=1080,H=1350,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),or=C('--or'),mu=C('--mu'),tx0=C('--tx'),gr=C('--gr'),rd=C('--rd'),cd=C('--cd'),bd=C('--bd');
  const rr=(x,y,w,h,f)=>{g.beginPath();g.roundRect?g.roundRect(x,y,w,h,Math.min(14,h/2)):g.rect(x,y,w,h);g.fillStyle=f;g.fill()},
@@ -159,15 +165,15 @@ async function openSum(k){
  const dl=p.X?Math.round((X/p.X-1)*100):null,cards=[['Ingresos',fn(I),gr],['Gastos',fn(X),rd],['Neto',fn(I-X),I-X<0?rd:gr]];
  cards.forEach(([l,v,col],i)=>{const x=60+i*327;rr(x,265,306,150,cd);tx(l.toUpperCase(),x+22,310,22,mu);tx(v,x+22,380,44,col,700,'Syne','left',262)});
  [['Ahorro',I?Math.round((I-X)/I*100)+'%':'—',tx0],[m?'Gasto/día':'Gasto/mes',fn(m?X/ed:X/M),tx0],['Gastos vs '+(m?plab(pk).slice(0,3):pk),dl==null?'—':(dl>0?'+':'')+dl+'%',dl>0?rd:gr]].forEach(([l,v,col],i)=>{const x=60+i*327;rr(x,435,306,120,cd);tx(l.toUpperCase(),x+22,478,20,mu,400,'','left',262);tx(v,x+22,530,34,col,700,'Syne','left',262)});
- rr(60,575,960,250,cd);tx(m?'GASTO DIARIO':'INGRESOS Y GASTOS POR MES',82,618,20,mu);
- const ser=Array.from({length:dim},(_,i)=>({e:0,i:0}));c.a.forEach(x=>{const o=ser[m?+x.d.slice(8,10)-1:+x.d.slice(5,7)-1];x.tp==='Deposit'?o.i+=x.v:o.e-=x.v});
- const mx=Math.max(1,...ser.map(o=>Math.max(o.i,o.e))),sl=880/dim,bw=sl*.4;
- ser.forEach((o,i)=>{const x=80+i*sl;if(o.i>0)rr(x,785-o.i/mx*130,bw,Math.max(2,o.i/mx*130),gr);if(o.e>0)rr(x+bw+1,785-o.e/mx*130,bw,Math.max(2,o.e/mx*130),rd);if(!m||i%5==4||!i)tx(m?i+1:'EFMAMJJASOND'[i],x+bw,815,18,mu,400,'','center')});
+ const ser=Array.from({length:dim},()=>({e:0,i:0}));c.a.forEach(x=>{const o=ser[m?+x.d.slice(8,10)-1:+x.d.slice(5,7)-1];x.tp==='Deposit'?o.i+=x.v:o.e-=x.v});
+ [['i','INGRESOS',gr,60],['e','GASTOS',rd,555]].forEach(([k,t,col,x0])=>{const w=465,m0=Math.max(0,...ser.map(o=>o[k])),mx=m0||1,sl=(w-44)/dim,bw=Math.max(3,sl*.7);
+  rr(x0,575,w,250,cd);tx(t+(m?' POR DÍA':' POR MES'),x0+22,615,20,mu);tx('máx '+fn(m0),x0+w-22,615,18,mu,400,'','right');
+  ser.forEach((o,i)=>{const x=x0+22+i*sl,h=o[k]/mx*130;if(o[k]>0)rr(x,785-h,bw,Math.max(2,h),col);if(!m||i%5==4||!i)tx(m?i+1:'EFMAMJJASOND'[i],x+bw/2,815,18,mu,400,'','center')})});
  const cats=grp(c.a,catKey).filter(x=>x.e>0).sort((p,q)=>q.e-p.e).slice(0,5),pay=grp(c.a,x=>x.p||'—').filter(x=>x.e>0).sort((p,q)=>q.e-p.e).slice(0,3),big=c.a.filter(x=>x.tp!=='Deposit').sort((p,q)=>p.v-q.v)[0];
  const lst=(t,l,x,y,w)=>{tx(t,x,y,22,mu);l.forEach((o,i)=>{const yy=y+50+i*66;tx(o.k,x,yy,26,tx0,400,'','left',w*.58);tx(fn(o.e),x+w,yy,26,tx0,700,'','right',w*.4);rr(x,yy+14,w,8,bd);rr(x,yy+14,Math.max(8,o.e/l[0].e*w),8,or)})};
  lst('TOP CATEGORÍAS',cats,60,875,460);lst('TOP BENEFICIARIOS',pay,580,875,440);
  if(big){tx('MAYOR GASTO',580,1130,22,mu);tx(big.p||big.c,580,1175,26,tx0,400,'','left',440);tx(fn(-big.v),580,1222,38,rd,700,'Syne','left',440);tx(big.d+' · '+big.c,580,1256,20,mu,400,'','left',440)}
- tx(`MMEX Viewer · en ${D.cur[D.bid].s} · ${c.a.length} movimientos`,60,1310,20,mu);tx(today,1020,1310,20,mu,400,'','right');
+ tx(`MMEX Viewer · en ${D.cur[D.bid].s} · ${c.a.length} movs · prom. ÷ ${m?ed+' días':fN(M)+' meses'}`,60,1310,20,mu);tx(today,1020,1310,20,mu,400,'','right');
  const url=cv.toDataURL('image/png');await new Promise(r=>cv.toBlob(b=>{SUMBLOB=b;r()}));
  closeSum();const o=document.createElement('div');o.id='sm';o.style.cssText='position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px)';
  o.innerHTML=`<img src="${url}" style="max-width:100%;max-height:calc(100vh - 120px);border-radius:12px;object-fit:contain"/><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center"><button class="ch on" data-a=shr>Compartir</button><button class=ch data-a=dl>Descargar</button><button class=ch data-a=vm data-v="${k}">Ver movs.</button><button class=ch data-a=cl>Cerrar</button></div>`;
