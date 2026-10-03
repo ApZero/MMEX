@@ -50,7 +50,7 @@ input[type=search]{width:100%;padding:9px 12px;border-radius:10px;border:1px sol
 const CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/',$=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let D=null,S={tab:'panel',year:'',acc:'',plan:false,f:{},type:'all',per:'m',lvl:0,q:'',lim:150,err:'',cp:{e:'',i:''},fx:0};
 try{S.lvl=+localStorage.getItem('lv')||0}catch(e){}
-const today=new Date().toLocaleDateString('sv');
+const today=new Date().toLocaleDateString('sv');S.year=today.slice(0,4);S.month=today.slice(5,7);
 let TH='auto';try{TH=localStorage.getItem('th')||'auto'}catch(e){}
 const applyTh=()=>{document.documentElement.dataset.th=TH;$('meta[name=theme-color]').content=TH==='light'||(TH==='auto'&&matchMedia('(prefers-color-scheme:light)').matches)?'#f6f5f2':'#0f0f13'};applyTh();
 const idb=(m,v)=>new Promise(r=>{const o=indexedDB.open('mmexv',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>r();o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readwrite':'readwrite').objectStore('k'),q=m==='get'?s.get('f'):s.put(v,'f');q.onsuccess=()=>r(q.result);q.onerror=()=>r()}});
@@ -73,7 +73,7 @@ async function load(buf,fn,fd){
   const b={id:x.TRANSID,d,a:x.ACCOUNTID,ta:x.TOACCOUNTID,tp,s:x.STATUS,n:x.NOTES||'',p:x.PAYEEID>0?pm[x.PAYEEID]||'':'',amt:x.TRANSACTIONAMOUNT??x.TRANSAMOUNT,tamt:x.TOTRANSAMOUNT,plan:d>today};
   R.push(b);const ss=sp[x.TRANSID],mk=(amt,c,n)=>T.push({...b,amt,c,n,v:tp==='Transfer'?0:(tp==='Deposit'?1:-1)*amt*rate});
   if(ss&&tp!=='Transfer')ss.forEach(s=>mk(s.SPLITTRANSAMOUNT,path(s.CATEGID),s.NOTES||b.n));else mk(b.amt,tp==='Transfer'?'':path(x.CATEGID),b.n)});
- D={cur,bid,A,R,T,fn,fd};S.err='';
+ D={cur,bid,A,R,T,fn,fd};S.err='';if(!T.some(x=>x.d.startsWith(S.year))){S.year=T.map(x=>x.d.slice(0,4)).sort().at(-1)||'';S.month=''}
  }catch(e){D=null;S.err='No se pudo leer el archivo (¿está cifrado o no es .mmex?). '+e.message}
  render()}
 
@@ -82,15 +82,16 @@ const fm=(n,c)=>{c=c||D.cur[D.bid];return(n<0?'−':'')+Math.abs(n).toLocaleStri
  accOk=x=>!S.acc||x.a==S.acc||x.ta==S.acc,
  bar=p=>`<div class=bar><i style="width:${Math.max(0,p)}%"></i></div>`,
  stat=(l,v,c)=>`<div class=cd><small class=mu>${l}</small><div class="sv ${c||''}">${v}</div></div>`;
-function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&(!S.year||x.d.startsWith(S.year))&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||(S.lvl&&!S.fx&&x.c.startsWith(S.f.c+':')))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
-const ex=()=>rows().filter(x=>x.tp!=='Transfer');
+const pfx=()=>S.year?S.year+(S.month?'-'+S.month:''):'';
+function rows(o={}){return D.T.filter(x=>(o.plan||S.plan||!x.plan)&&x.d.startsWith(o.np?'':o.nm?S.year:pfx())&&accOk(x)&&(!o.f||((!S.f.c||x.c===S.f.c||(S.lvl&&!S.fx&&x.c.startsWith(S.f.c+':')))&&(!S.f.p||(x.p||'—')===S.f.p)&&(!S.f.m||x.d.startsWith(S.f.m)))))}
+const ex=o=>rows(o).filter(x=>x.tp!=='Transfer');
 function grp(a,k){const m={};a.forEach(x=>{const g=k(x),o=m[g]=m[g]||{k:g,e:0,i:0,n:0};x.tp==='Deposit'?o.i+=x.v:o.e-=x.v;o.n++});return Object.values(m)}
 function mo(a){const ms=[...new Set(a.map(x=>x.d.slice(0,7)))].sort();if(!ms.length)return 1;const[y1,m1]=ms[0].split('-'),[y2,m2]=ms.at(-1).split('-');return(y2-y1)*12+(m2-m1)+1}
 function bal(){const b={};for(const k in D.A)b[k]=D.A[k].init;D.R.forEach(x=>{if(x.plan&&!S.plan)return;if(x.tp==='Transfer'){if(x.a in b)b[x.a]-=x.amt;if(x.ta in b)b[x.ta]+=x.tamt}else if(x.a in b)b[x.a]+=(x.tp==='Deposit'?1:-1)*x.amt});return b}
 
 function panel(){
  const a=ex(),M=mo(a),b=bal(),I=a.reduce((s,x)=>s+(x.tp==='Deposit'?x.v:0),0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0);
- const g=grp(a,x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>Math.max(x.i,x.e))),top=g.slice().sort((p,q)=>q.e-p.e)[0];
+ const g=grp(ex({nm:1}),x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>Math.max(x.i,x.e))),top=g.slice().sort((p,q)=>q.e-p.e)[0];
  const G={};Object.values(D.A).filter(x=>x.open||b[x.id]).forEach(x=>(G[x.cur]=G[x.cur]||[]).push(x));let net=0;
  const accs=Object.entries(G).map(([c,l])=>{const cu=D.cur[c],s=l.reduce((t,x)=>t+b[x.id],0);net+=s*cu.r;return`<div class=cd><div class=rt><b>${E(cu.s)}</b><b>${fm(s,cu)}</b></div>${l.sort((p,q)=>b[q.id]-b[p.id]).map(x=>`<div class=ar data-a=acc data-v=${x.id}><span>${E(x.name)}</span><span class="${b[x.id]<0?'rd':''}">${fm(b[x.id],cu)}</span></div>`).join('')}</div>`}).join('');
  const P=D.T.filter(x=>x.plan&&x.tp!=='Transfer'&&accOk(x)),pv=P.reduce((s,x)=>s+x.v,0),pl=P.map(x=>x.d).sort().at(-1);
@@ -99,7 +100,7 @@ function panel(){
  return`<div class=g>${stat('Patrimonio ('+E(D.cur[D.bid].s)+')',fm(net),net<0?'rd':'')}${stat('Balance período',fm(I-X),I-X<0?'rd':'gr')}${stat('Ingresos',fm(I),'gr')}${stat('Gastos',fm(X),'rd')}${stat('Prom. gasto/mes',fm(X/M))}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Tasa de ahorro',I?Math.round((I-X)/I*100)+'%':'—')}${stat('Mes más alto',top?top.k+'<br><small>'+fm(top.e)+'</small>':'—')}</div>
  ${P.length?`<div class=cd style="margin-top:10px;cursor:pointer" data-a=typ data-v=plan><small class=mu>PLANIFICADO PENDIENTE · ${P.length} movs${pl?' · hasta '+pl:''}</small><div class=sv>${fm(pv)}</div>${S.plan?'':`<small class=mu>Patrimonio proyectado: ${fm(net+pv)}</small>`}</div>`:''}
  <h1 style="font-size:14px;margin:14px 0 8px">Cuentas</h1>${accs}
- <h1 style="font-size:14px;margin:14px 0 8px">${S.year||'Últimos 12 meses'}</h1><div class=cd><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k}><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i><i style="height:${x.e/mx*100}%;background:var(--rd)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div><small class=mu><span class=gr>■</span> ingresos <span class=rd>■</span> gastos</small></div>
+ <h1 style="font-size:14px;margin:14px 0 8px">${S.year||'Últimos 12 meses'}</h1><div class=cd><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k} style="opacity:${S.month&&x.k.slice(5)!==S.month?.4:1}"><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i><i style="height:${x.e/mx*100}%;background:var(--rd)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div><small class=mu><span class=gr>■</span> ingresos <span class=rd>■</span> gastos</small></div>
  <div class=g2><div class=cd><small class=mu>TOP CATEGORÍAS</small>${top5(tp(catKey,5),'c')}</div><div class=cd><small class=mu>TOP BENEFICIARIOS</small>${top5(tp(x=>x.p||'—',5),'p')}</div></div>
  <div class=cd><small class=mu>MAYORES GASTOS</small>${big.map(mv).join('')}</div>`}
 
@@ -113,7 +114,7 @@ function rl(t,m){
   return`<div class=row ${at} data-v="${E(dr?cp:x.k)}"><div class=rt><span>${E(dr?'Directo en '+cp.split(':').pop():hi?x.k.split(':').pop():x.k)}${nv?' ›':''}</span><b>${fm(x[m])}</b></div>${bar(x[m]/mx*100)}<small class=mu>${x.n} mov · prom/mes ${fm(x[m]/M)} · ${Math.round(x[m]/tot*100)}%</small></div>`}).join('')}
 const rank=t=>rl(t,'e');
 function pers(){
- const a=ex(),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=mo(a),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
+ const a=ex({nm:1}),m=S.per==='m',g=grp(a,x=>x.d.slice(0,m?7:4)).sort((p,q)=>q.k>p.k?1:-1),M=mo(a),I=g.reduce((s,x)=>s+x.i,0),X=g.reduce((s,x)=>s+x.e,0);
  const r=(l,i,e,s,sub,at)=>`<div class=pr ${at||''}><span>${l}</span><span class=gr>${fn(i)}</span><span class=rd>${fn(e)}</span><b class="${s<0?'rd':''}">${fn(s)}</b>${sub?`<small class=mu>${sub}</small>`:''}</div>`;
  return`<div class=sw><button class="ch${m?' on':''}" data-a=per data-v=m>Mensual</button><button class="ch${m?'':' on'}" data-a=per data-v=y>Anual</button><small class=mu>en ${E(D.cur[D.bid].s)}</small></div><div class=pr style="border:0"><small class=mu>Período</small><small class=mu>Ingresos</small><small class=mu>Gastos</small><small class=mu>Neto</small></div>`+
  r('<b>Prom./mes</b>',I/M,X/M,(I-X)/M)+r('<b>Total</b>',I,X,I-X)+
@@ -122,7 +123,7 @@ function pers(){
 function mv(x){const T=x.tp==='Transfer',c=ac(x.a),s=T?'':(x.tp==='Deposit'?1:-1);
  return`<div class="mv${x.plan?' pl':''}"><div><div>${E(T?(D.A[x.a]?.name+' → '+D.A[x.ta]?.name):x.p||'—')}${x.plan?'<span class=bd>plan</span>':''}</div><small>${x.d} · ${E(x.c||'Transferencia')}${T?'':' · '+E(D.A[x.a]?.name)}${x.n?' · '+E(x.n):''}</small></div><b class="${T?'':s>0?'gr':'rd'}">${fm((s||1)*x.amt,c)}</b></div>`}
 function list(){
- let a=rows({f:1,plan:S.type==='plan'});const q=S.q.toLowerCase();
+ let a=rows({f:1,plan:S.type==='plan',np:S.type==='plan'});const q=S.q.toLowerCase();
  if(S.type==='plan')a=a.filter(x=>x.plan);else if(S.type==='e')a=a.filter(x=>x.tp==='Withdrawal');else if(S.type==='i')a=a.filter(x=>x.tp==='Deposit');else if(S.type==='t')a=a.filter(x=>x.tp==='Transfer');
  if(q)a=a.filter(x=>(x.p+x.c+x.n+(D.A[x.a]?.name||'')).toLowerCase().includes(q));
  a.sort((p,q)=>q.d>p.d?1:q.d<p.d?-1:q.id-p.id);const tot=a.filter(x=>x.tp!=='Transfer').reduce((s,x)=>s+x.v,0);
@@ -134,12 +135,12 @@ function movs(){
 const catKey=x=>S.lvl?x.c.split(':')[0]:x.c,cats=()=>rank('c'),pay=()=>rank('p');
 
 function ingr(){
- const a=ex(),d=a.filter(x=>x.tp==='Deposit'),M=mo(a),I=d.reduce((s,x)=>s+x.v,0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0),g=grp(d,x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>x.i)),best=g.slice().sort((p,q)=>q.i-p.i)[0],big=d.slice().sort((p,q)=>q.v-p.v)[0];
- return`<div class=g>${stat('Total ingresos',fm(I),'gr')}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Mejor mes',best?best.k+'<br><small>'+fm(best.i)+'</small>':'—')}${stat('Cubren los gastos',X?Math.round(I/X*100)+'%':'—')}${stat('Nº de ingresos',d.length)}${stat('Prom. por ingreso',d.length?fm(I/d.length):'—')}${stat('Meses con ingresos',g.length+' / '+M)}${stat('Mayor ingreso',big?fm(big.v)+'<br><small>'+E(big.p||big.c)+' · '+big.d+'</small>':'—')}</div>
- <div class=cd style="margin-top:10px"><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k}><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div></div>
+ const a=ex(),d=a.filter(x=>x.tp==='Deposit'),M=mo(a),I=d.reduce((s,x)=>s+x.v,0),X=a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0),gf=grp(d,x=>x.d.slice(0,7)),g=grp(ex({nm:1}).filter(x=>x.tp==='Deposit'),x=>x.d.slice(0,7)).sort((p,q)=>p.k>q.k?1:-1),ch=S.year?g:g.slice(-12),mx=Math.max(1,...ch.map(x=>x.i)),best=gf.slice().sort((p,q)=>q.i-p.i)[0],big=d.slice().sort((p,q)=>q.v-p.v)[0];
+ return`<div class=g>${stat('Total ingresos',fm(I),'gr')}${stat('Prom. ingreso/mes',fm(I/M))}${stat('Mejor mes',best?best.k+'<br><small>'+fm(best.i)+'</small>':'—')}${stat('Cubren los gastos',X?Math.round(I/X*100)+'%':'—')}${stat('Nº de ingresos',d.length)}${stat('Prom. por ingreso',d.length?fm(I/d.length):'—')}${stat('Meses con ingresos',gf.length+' / '+M)}${stat('Mayor ingreso',big?fm(big.v)+'<br><small>'+E(big.p||big.c)+' · '+big.d+'</small>':'—')}</div>
+ <div class=cd style="margin-top:10px"><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k} style="opacity:${S.month&&x.k.slice(5)!==S.month?.4:1}"><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div></div>
  <h1 style="font-size:14px;margin:14px 0 8px">Por categoría</h1><div class=cd>${rl('c','i')}</div><h1 style="font-size:14px;margin:14px 0 8px">Por fuente</h1><div class=cd>${rl('p','i')}</div>`}
 
-const MS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],plab=k=>k.length===4?k:MS[+k.slice(5)-1]+' '+k.slice(0,4);
+const MSH=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],MS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],plab=k=>k.length===4?k:MS[+k.slice(5)-1]+' '+k.slice(0,4);
 let SUMK='',SUMBLOB=null;
 const pd=k=>{const a=D.T.filter(x=>(S.plan||!x.plan)&&accOk(x)&&x.tp!=='Transfer'&&x.d.startsWith(k));return{a,I:a.reduce((s,x)=>s+(x.tp==='Deposit'?x.v:0),0),X:a.reduce((s,x)=>s+(x.tp!=='Deposit'?-x.v:0),0)}},
 closeSum=()=>$('#sm')?.remove(),
@@ -175,17 +176,17 @@ async function openSum(k){
 function render(){
  const app=$('#app');
  if(!D){app.innerHTML=`<div class=w><h1>MMEX <span class=or>Viewer</span></h1><div class=cd style="margin-top:20px;text-align:center;padding:40px 20px"><p>Abrí tu archivo <b>.mmex</b> de MoneyManager EX</p><p class=mu style="margin:8px 0 16px">Se lee solo en tu dispositivo, no se sube a ningún lado.</p><button class=pb data-a=open>Elegir archivo</button>${S.err?`<p class=rd style="margin-top:14px">${E(S.err)}</p>`:''}</div></div>`;return}
- const yrs=[...new Set(D.T.map(x=>x.d.slice(0,4)))].sort().reverse(),np=D.T.filter(x=>x.plan&&x.tp!=='Transfer').length,
+ const hasM=new Set(D.T.filter(x=>x.d.startsWith(S.year+'-')).map(x=>x.d.slice(5,7))),yrs=[...new Set(D.T.map(x=>x.d.slice(0,4)))].sort().reverse(),np=D.T.filter(x=>x.plan&&x.tp!=='Transfer').length,
  tabs=[['panel','Panel'],['cats','Categ.'],['pay','Benef.'],['ingr','Ingresos'],['pers','Períodos'],['movs','Movs.']];
  app.innerHTML=`<div class=w><div class=hd><div><h1>MMEX <span class=or>Viewer</span></h1><small class=mu>${E(D.fn)} · mod. ${D.fd}</small></div><div><button class=gb data-a=th>${{auto:'Auto',light:'☀ Claro',dark:'☾ Oscuro'}[TH]}</button> <button class=gb data-a=open>Cambiar</button></div></div>
  <div class=tb>${tabs.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-a=nav data-v=${k}>${l}</button>`).join('')}</div>
  <div class=ft><select id=acs><option value="">Todas las cuentas</option>${Object.values(D.A).sort((p,q)=>p.name.localeCompare(q.name)).map(x=>`<option value=${x.id}${S.acc==x.id?' selected':''}>${E(x.name)}${x.open?'':' (cerrada)'}</option>`).join('')}</select><button class="ch${S.plan?' on':''}" data-a=pl>Planif.: ${S.plan?'incluidas':'excluidas'}${np?' ('+np+')':''}</button></div>
- ${S.tab==='panel'||S.tab==='cats'||S.tab==='ingr'?`<div class=sw><small class=mu>Subcategorías:</small><button class="ch${S.lvl?'':' on'}" data-a=lvl data-v=0>Separadas</button><button class="ch${S.lvl?' on':''}" data-a=lvl data-v=1>Sumadas</button></div>`:''}${yrs.length>1?`<div class=yr><button class="ch${S.year?'':' on'}" data-a=yr data-v="">Todos</button>${yrs.map(y=>`<button class="ch${S.year===y?' on':''}" data-a=yr data-v=${y}>${y}</button>`).join('')}</div>`:''}
+ ${S.tab==='panel'||S.tab==='cats'||S.tab==='ingr'?`<div class=sw><small class=mu>Subcategorías:</small><button class="ch${S.lvl?'':' on'}" data-a=lvl data-v=0>Separadas</button><button class="ch${S.lvl?' on':''}" data-a=lvl data-v=1>Sumadas</button></div>`:''}${S.year?`<div class=yr><button class="ch${S.month?'':' on'}" data-a=mth data-v="">Año</button>${MSH.map((n,i)=>{const mm=String(i+1).padStart(2,'0');return`<button class="ch${S.month===mm?' on':''}" style="${hasM.has(mm)?'':'opacity:.4'}" data-a=mth data-v=${mm}>${n}</button>`}).join('')}</div>`:''}${yrs.length>1?`<div class=yr><button class="ch${S.year?'':' on'}" data-a=yr data-v="">Todos</button>${yrs.map(y=>`<button class="ch${S.year===y?' on':''}" data-a=yr data-v=${y}>${y}</button>`).join('')}</div>`:''}
  <div class=fade>${({panel,cats,pay,ingr,pers,movs})[S.tab]()}</div></div>`}
 
 document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el)return;const{a,t,v}=el.dataset,go=()=>{S.tab='movs';S.type='all';S.lim=150;S.q=''};
  if(a==='open')return $('#fi').click();
- ({nav:()=>{if(v===S.tab)S.cp={e:'',i:''};S.tab=v;S.f={};S.fx=0;S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};S.fx=el.dataset.x?1:0;go();if(el.dataset.y==='i')S.type='i'},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>S.year=v,lvl:()=>{S.cp={e:'',i:''};S.lvl=+v;try{localStorage.setItem('lv',v)}catch(e){}},sum:()=>openSum(v),shr:SH,dl:DL,cl:closeSum,vm:()=>{closeSum();S.type='all';S.q='';S.lim=150;S.tab='movs';S.f={};if(v.length===7){S.f={m:v};S.year=''}else S.year=v},per:()=>S.per=v,clr:()=>{S.f={};S.fx=0},cp:()=>{S.cp[el.dataset.m||'e']=v},cpg:()=>{S.fx=0;if(D.T.some(x=>x.c.startsWith(v+':'))){S.cp.e=v;S.tab='cats';S.f={}}else{S.f={c:v};go()}},more:()=>S.lim+=200})[a]?.();
+ ({nav:()=>{if(v===S.tab)S.cp={e:'',i:''};S.tab=v;S.f={};S.fx=0;S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};S.fx=el.dataset.x?1:0;go();if(el.dataset.y==='i')S.type='i'},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>{S.year=v;if(!v)S.month=''},mth:()=>S.month=v,lvl:()=>{S.cp={e:'',i:''};S.lvl=+v;try{localStorage.setItem('lv',v)}catch(e){}},sum:()=>openSum(v),shr:SH,dl:DL,cl:closeSum,vm:()=>{closeSum();S.type='all';S.q='';S.lim=150;S.tab='movs';S.f={};S.f={};S.year=v.slice(0,4);S.month=v.length===7?v.slice(5):''},per:()=>S.per=v,clr:()=>{S.f={};S.fx=0},cp:()=>{S.cp[el.dataset.m||'e']=v},cpg:()=>{S.fx=0;if(D.T.some(x=>x.c.startsWith(v+':'))){S.cp.e=v;S.tab='cats';S.f={}}else{S.f={c:v};go()}},more:()=>S.lim+=200})[a]?.();
  if(a==='yr'&&S.tab==='pers'&&el.dataset.t==='m')S.tab='pers';render();if(a==='nav'||a==='drill')scrollTo(0,0)});
 document.addEventListener('change',e=>{if(e.target.id==='acs'){S.acc=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id==='sq'){S.q=e.target.value;S.lim=150;$('#ml').innerHTML=list()}});
