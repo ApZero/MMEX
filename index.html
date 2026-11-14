@@ -51,7 +51,7 @@ const CDN='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/',$=s=>document.
 let D=null,S={tab:'panel',year:'',acc:'',plan:false,f:{},type:'all',per:'m',lvl:0,q:'',lim:150,err:'',cp:{e:'',i:'',c:''},fx:0,cv:'c',cl:false};
 try{S.lvl=+localStorage.getItem('lv')||0}catch(e){}
 try{S.cv=localStorage.getItem('cv')||'c'}catch(e){}
-let AC={};try{AC=JSON.parse(localStorage.getItem('ac')||'{}')}catch(e){}
+let AC={},FX={};try{AC=JSON.parse(localStorage.getItem('ac')||'{}')}catch(e){}try{FX=JSON.parse(localStorage.getItem('fx')||'{}')}catch(e){}
 const today=new Date().toLocaleDateString('sv');S.year=today.slice(0,4);S.month=today.slice(5,7);
 const NAVK=['tab','f','fx','type','cp','year','month','acc','plan','lvl','per','cv'],snap=()=>JSON.parse(JSON.stringify(Object.fromEntries(NAVK.map(k=>[k,S[k]]))));
 let LAST='';
@@ -66,8 +66,9 @@ async function load(buf,fn,fd){
  try{
  const SQL=await initSqlJs({locateFile:f=>CDN+f}),db=new SQL.Database(new Uint8Array(buf));
  const q=s=>{const r=db.exec(s)[0];return r?r.values.map(v=>Object.fromEntries(r.columns.map((c,i)=>[c,v[i]]))):[]},t=(a,b)=>{try{return q(a)}catch(e){return q(b)}};
- const cur={};q('select * from CURRENCYFORMATS_V1').forEach(c=>{const nm=(c.CURRENCY_SYMBOL||'')+(c.CURRENCYNAME||'')+(c.CURRENCY_SYMBOL||'');cur[c.CURRENCYID]={s:c.CURRENCY_SYMBOL||c.CURRENCYNAME,r:c.BASECONVRATE||1,dec:/PYG|Guaran|₲|Gs/i.test(nm)?0:Math.round(Math.log10(c.SCALE||1))}});
- const bid=+(q("select INFOVALUE v from INFOTABLE_V1 where INFONAME='BASECURRENCYID'")[0]?.v)||+Object.keys(cur)[0];
+ const cur={};q('select * from CURRENCYFORMATS_V1').forEach(c=>{const nm=(c.CURRENCY_SYMBOL||'')+(c.CURRENCYNAME||'')+(c.CURRENCY_SYMBOL||'');cur[c.CURRENCYID]={s:c.CURRENCY_SYMBOL||c.CURRENCYNAME,r:c.BASECONVRATE||1,ra:c.BASECONVRATE||1,n:c.CURRENCYNAME||'',dec:/PYG|Guaran|₲|Gs/i.test(nm)?0:Math.round(Math.log10(c.SCALE||1))}});
+ t('select CURRENCYID id,CURRVALUE v from CURRENCYHISTORY_V1 order by CURRDATE','select 1 where 0').forEach(h=>{if(cur[h.id]&&h.v>0)cur[h.id].ra=h.v});
+ const bid=+(q("select INFOVALUE v from INFOTABLE_V1 where INFONAME='BASECURRENCYID'")[0]?.v)||+(Object.keys(cur).find(i=>/PYG|Guaran|₲|Gs|Paragu/i.test(cur[i].s+cur[i].n))||Object.keys(cur)[0]);
  const cm={};q('select * from CATEGORY_V1').forEach(c=>cm[c.CATEGID]=c);
  const path=id=>{const c=cm[id];return c?(c.PARENTID>0&&cm[c.PARENTID]?path(c.PARENTID)+':':'')+c.CATEGNAME:'Sin categoría'};
  const pm={};q('select * from PAYEE_V1').forEach(p=>pm[p.PAYEEID]=p.PAYEENAME);
@@ -80,7 +81,7 @@ async function load(buf,fn,fd){
   const b={id:x.TRANSID,d,a:x.ACCOUNTID,ta:x.TOACCOUNTID,tp,s:x.STATUS,n:x.NOTES||'',p:x.PAYEEID>0?pm[x.PAYEEID]||'':'',amt:x.TRANSACTIONAMOUNT??x.TRANSAMOUNT,tamt:x.TOTRANSAMOUNT,plan:d>today};
   R.push(b);const ss=sp[x.TRANSID],mk=(amt,c,n)=>T.push({...b,amt,c,n,v:tp==='Transfer'?0:(tp==='Deposit'?1:-1)*amt*rate});
   if(ss&&tp!=='Transfer')ss.forEach(s=>mk(s.SPLITTRANSAMOUNT,path(s.CATEGID),s.NOTES||b.n));else mk(b.amt,tp==='Transfer'?'':path(x.CATEGID),b.n)});
- D={cur,bid,A,R,T,fn,fd};D.t0=T.reduce((m,x)=>!x.plan&&x.d<m?x.d:m,today).slice(0,7);S.err='';if(!T.some(x=>x.d.startsWith(S.year))){S.year=T.map(x=>x.d.slice(0,4)).sort().at(-1)||'';S.month=''}histInit();
+ D={cur,bid,A,R,T,fn,fd};D.t0=T.reduce((m,x)=>!x.plan&&x.d<m?x.d:m,today).slice(0,7);setRates();S.err='';if(!T.some(x=>x.d.startsWith(S.year))){S.year=T.map(x=>x.d.slice(0,4)).sort().at(-1)||'';S.month=''}histInit();
  }catch(e){D=null;S.err='No se pudo leer el archivo (¿está cifrado o no es .mmex?). '+e.message}
  render()}
 
@@ -97,6 +98,7 @@ function mo(a){const ms=[...new Set(a.map(x=>x.d.slice(0,7)))].sort();if(!ms.len
 function bal(){const b={};for(const k in D.A)b[k]=D.A[k].init;D.R.forEach(x=>{if(x.plan&&!S.plan)return;if(x.tp==='Transfer'){if(x.a in b)b[x.a]-=x.amt;if(x.ta in b)b[x.ta]+=x.tamt}else if(x.a in b)b[x.a]+=(x.tp==='Deposit'?1:-1)*x.amt});return b}
 
 const TY=['Efectivo','A la vista','Ahorro','Ahorro programado','Inversión','Riesgo'],TC={'Efectivo':'#4ade80','A la vista':'#38bdf8','Ahorro':'#a78bfa','Ahorro programado':'#fbbf24','Inversión':'#f97316','Riesgo':'#f87171','Sin clasificar':'#8a8a96'},GU={Cash:'Efectivo',Checking:'A la vista',Term:'Ahorro programado',Investment:'Inversión',Shares:'Inversión'},acType=x=>AC[x.name]||GU[x.ty]||'Sin clasificar';
+function setRates(){for(const id in D.cur){const c=D.cur[id];c.r=+id===D.bid?1:(FX[c.s]>0?FX[c.s]:c.ra)}D.T.forEach(x=>{x.v=x.tp==='Transfer'?0:(x.tp==='Deposit'?1:-1)*x.amt*(D.cur[D.A[x.a]?.cur]?.r||1)})}
 const dimOf=(y,m)=>new Date(y,m,0).getDate(),fN=n=>Number.isInteger(n)?String(n):n.toFixed(1).replace('.',',');
 function monthsIn(y){const Y=+y,cy=+today.slice(0,4),cm=+today.slice(5,7),cd=+today.slice(8),t0=D.t0,st=Y===+t0.slice(0,4)?+t0.slice(5):1,en=!S.plan&&Y===cy?cm-1+cd/dimOf(cy,cm):12;return Math.max(.1,en-(st-1))}
 function allMonths(){const cy=+today.slice(0,4),y1=S.plan?D.T.reduce((m,x)=>Math.max(m,+x.d.slice(0,4)),cy):cy;let n=0;for(let y=+D.t0.slice(0,4);y<=y1;y++)n+=monthsIn(y);return n}
@@ -111,12 +113,14 @@ function panel(){
  const tyS={};Object.values(D.A).filter(x=>x.open||b[x.id]).forEach(x=>{const t=acType(x);tyS[t]=(tyS[t]||0)+b[x.id]*(D.cur[x.cur]?.r||1)});
  const ord=[...TY,'Sin clasificar'].filter(t=>tyS[t]),pos=ord.reduce((q,t)=>q+Math.max(0,tyS[t]),0)||1;
  const dist=`<div class=cd><div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:8px">${ord.filter(t=>tyS[t]>0).map(t=>`<i style="width:${tyS[t]/pos*100}%;background:${TC[t]}"></i>`).join('')}</div>${ord.map(t=>`<div class=ar style="cursor:default"><span><span style="color:${TC[t]}">■</span> ${t}</span><span>${fm(tyS[t])} · ${Math.round(tyS[t]/pos*100)}%</span></div>`).join('')}${tyS['Sin clasificar']?'<small class=mu>Tocá "Clasificar" en Cuentas para asignar el tipo de cada una.</small>':''}</div>`;
+ const fxc=Object.keys(G).filter(c=>+c!==D.bid).map(c=>D.cur[c]),bs=E(D.cur[D.bid].s),
+ fx=fxc.length?`<div class=cd><small class=mu>TIPO DE CAMBIO · 1 unidad = ? ${bs}</small>${fxc.map(c=>`<div class=ar style="cursor:default;align-items:center"><span>1 ${E(c.s)}</span><span><input type=number step=any inputmode=decimal data-fx="${E(c.s)}" value="${FX[c.s]||''}" placeholder="${c.ra}" style="width:110px;text-align:right;padding:5px 8px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)"/> ${bs}</span></div>`).join('')}<small class=mu>Vacío = tasa del archivo (${fxc.map(c=>fm(c.ra,D.cur[D.bid])).join(' · ')}). Se usa en patrimonio, totales y distribución.</small></div>`:'';
  const P=D.T.filter(x=>x.plan&&x.tp!=='Transfer'&&accOk(x)),pv=P.reduce((s,x)=>s+x.v,0),pl=P.map(x=>x.d).sort().at(-1);
  const tp=(k,n)=>grp(a,k).sort((p,q)=>q.e-p.e).slice(0,n).filter(x=>x.e>0),top5=(l,t)=>l.map(x=>`<div class=row data-a=${t==='c'&&S.lvl?'cpg':'drill'} data-t=${t} data-v="${E(x.k)}"><div class=rt><span>${E(x.k)}</span><b>${fn(x.e)}</b></div>${bar(x.e/l[0].e*100)}</div>`).join('');
  const big=a.filter(x=>x.tp==='Withdrawal').sort((p,q)=>p.v-q.v).slice(0,5);
  return`<div class=g>${stat('Patrimonio ('+E(D.cur[D.bid].s)+')',fm(net),net<0?'rd':'')}${stat('Balance período',fm(I-X),I-X<0?'rd':'gr')}${stat('Ingresos',fm(I),'gr')}${stat('Gastos',fm(X),'rd')}${stat('Prom. gasto/'+sp.u,fm(X/sp.n)+'<br><small class=mu>÷ '+sp.l+'</small>')}${stat('Prom. ingreso/'+sp.u,fm(I/sp.n)+'<br><small class=mu>÷ '+sp.l+'</small>')}${stat('Tasa de ahorro',I?Math.round((I-X)/I*100)+'%':'—')}${stat('Mes más alto',top?top.k+'<br><small>'+fm(top.e)+'</small>':'—')}</div>
  ${P.length?`<div class=cd style="margin-top:10px;cursor:pointer" data-a=typ data-v=plan><small class=mu>PLANIFICADO PENDIENTE · ${P.length} movs${pl?' · hasta '+pl:''}</small><div class=sv>${fm(pv)}</div>${S.plan?'':`<small class=mu>Patrimonio proyectado: ${fm(net+pv)}</small>`}</div>`:''}
- <h1 style="font-size:14px;margin:14px 0 8px">Distribución del dinero</h1>${dist}
+ <h1 style="font-size:14px;margin:14px 0 8px">Distribución del dinero</h1>${dist}${fx}
  <div class=rt style="margin:14px 0 8px;align-items:center"><h1 style="font-size:14px">Cuentas</h1><button class="ch${S.cl?' on':''}" data-a=clf>${S.cl?'Listo':'Clasificar'}</button></div>${accs}
  <h1 style="font-size:14px;margin:14px 0 8px">${S.year||'Últimos 12 meses'}</h1><div class=cd><div class=mc>${ch.map(x=>`<div data-a=sum data-v=${x.k} style="opacity:${S.month&&x.k.slice(5)!==S.month?.4:1}"><div class=cb><i style="height:${x.i/mx*100}%;background:var(--gr)"></i><i style="height:${x.e/mx*100}%;background:var(--rd)"></i></div><small class=mu>${x.k.slice(5)}</small></div>`).join('')}</div><small class=mu><span class=gr>■</span> ingresos <span class=rd>■</span> gastos</small></div>
  <div class=g2><div class=cd><small class=mu>TOP CATEGORÍAS</small>${top5(tp(catKey,5),'c')}</div><div class=cd><small class=mu>TOP BENEFICIARIOS</small>${top5(tp(x=>x.p||'—',5),'p')}</div></div>
@@ -220,7 +224,7 @@ document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!
  if(a==='open')return $('#fi').click();
  ({nav:()=>{if(v===S.tab)S.cp={e:'',i:'',c:''};S.tab=v;S.f={};S.fx=0;S.lim=150;S.type='all';S.q=''},drill:()=>{S.f={[t]:v};S.fx=el.dataset.x?1:0;go();if(el.dataset.y==='i'||el.dataset.y==='e')S.type=el.dataset.y},acc:()=>{S.acc=v;S.f={};go()},typ:()=>{S.type=v;S.tab='movs'},pl:()=>S.plan=!S.plan,th:()=>{TH={auto:'light',light:'dark',dark:'auto'}[TH];try{localStorage.setItem('th',TH)}catch(e){}applyTh()},yr:()=>{S.year=v;if(!v)S.month=''},mth:()=>S.month=v,lvl:()=>{S.cp={e:'',i:'',c:''};S.lvl=+v;try{localStorage.setItem('lv',v)}catch(e){}},cv:()=>{S.cv=v;try{localStorage.setItem('cv',v)}catch(e){}},clf:()=>S.cl=!S.cl,sumsel:()=>openSum(S.year?S.year+(S.month?'-'+S.month:''):'all'),sum:()=>openSum(v),shr:SH,dl:DL,cl:exitSum,vm:()=>{closeSum();S.type='all';S.q='';S.lim=150;S.tab='movs';S.f={};S.f={};S.year=v==='all'?'':v.slice(0,4);S.month=v.length===7?v.slice(5):''},per:()=>S.per=v,clr:()=>{S.f={};S.fx=0},cp:()=>{S.cp[el.dataset.m||'e']=v},cpg:()=>{S.fx=0;if(D.T.some(x=>x.c.startsWith(v+':'))){S.cp.e=v;S.tab='egr';S.f={}}else{S.f={c:v};go()}},more:()=>S.lim+=200})[a]?.();
  if(a==='yr'&&S.tab==='pers'&&el.dataset.t==='m')S.tab='pers';pushNav(a==='vm'&&history.state?.pop);render();if(a==='nav'||a==='drill')scrollTo(0,0)});
-document.addEventListener('change',e=>{if(e.target.id==='acs'){S.acc=e.target.value;pushNav();render()}if(e.target.dataset.acn!==undefined){AC[e.target.dataset.acn]=e.target.value;try{localStorage.setItem('ac',JSON.stringify(AC))}catch(x){}render()}});
+document.addEventListener('change',e=>{if(e.target.id==='acs'){S.acc=e.target.value;pushNav();render()}if(e.target.dataset.fx!==undefined){const v=parseFloat(String(e.target.value).replace(',','.')),k=e.target.dataset.fx;if(v>0)FX[k]=v;else delete FX[k];try{localStorage.setItem('fx',JSON.stringify(FX))}catch(x){}setRates();render()}if(e.target.dataset.acn!==undefined){AC[e.target.dataset.acn]=e.target.value;try{localStorage.setItem('ac',JSON.stringify(AC))}catch(x){}render()}});
 document.addEventListener('input',e=>{if(e.target.id==='sq'){S.q=e.target.value;S.lim=150;$('#ml').innerHTML=list()}});
 $('#fi').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;const b=await f.arrayBuffer(),d=new Date(f.lastModified).toLocaleDateString('es-PY');await load(b,f.name,d);if(D)idb('set',{b,n:f.name,d});e.target.value=''});
 histInit();render();idb('get').then(r=>r&&load(r.b,r.n,r.d));
